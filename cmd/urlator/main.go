@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/kuai6/urlator/pkg/renderer"
 	"github.com/kuai6/urlator/pkg/runner"
@@ -20,12 +22,29 @@ func main() {
 
 	rnr := runner.NewRunner()
 
-	res, err := rnr.Run(context.Background(), list)
+	ctx, cancel := context.WithCancel(context.Background())
+	res, err := rnr.Run(ctx, list)
 	if err != nil {
+		cancel()
 		log.Fatal(errors.Wrap(err, "runner error"))
 	}
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+
+	defer func() {
+		cancel()
+		signal.Stop(c)
+	}()
+
+	go func() {
+		<-c
+		cancel()
+	}()
 
 	rdr := renderer.NewRenderer()
 
 	fmt.Print(rdr.Render(res))
+
+	ctx.Done()
 }
